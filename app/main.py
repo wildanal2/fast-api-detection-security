@@ -2,11 +2,10 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.routes import root
-from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-import logging
 from app.routes.knn import knn_v1
 from app.routes.catboost import catboost_v1
+import logging
 
 app = FastAPI()
 
@@ -26,12 +25,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"errors": errors, "body_received": body},
     )
 
-logger = logging.getLogger("uvicorn.error")
-
 class LogRequestMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        body = await request.body()
-        logger.info(f"Request body: {body.decode('utf-8')}")
+        body = await request.body() 
+        logging.info(f"Request body: {body.decode('utf-8')}")
         response = await call_next(request)
         return response
 

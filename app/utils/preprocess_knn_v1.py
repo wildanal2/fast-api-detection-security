@@ -1,10 +1,12 @@
 import pandas as pd
+import numpy as np
 import re
 from joblib import load
 from sklearn.feature_extraction.text import CountVectorizer
 from app.utils.constants import SUSPICIOUS_KEYWORDS
+import logging
 
-def preprocess_input(data: pd.DataFrame) -> pd.DataFrame:
+def preprocess_knn_input(data: pd.DataFrame) -> pd.DataFrame:
     """
     Fungsi untuk melakukan preprocessing pada data input.
     Args:
@@ -12,6 +14,7 @@ def preprocess_input(data: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Data yang sudah di-preprocess default.
     """
+    logging.info(f"Request body: {data}")
     # Mengisi nilai kosong dengan default
     # Konfigurasi Pandas untuk future behavior
     pd.set_option('future.no_silent_downcasting', True)
@@ -40,10 +43,11 @@ def preprocess_input(data: pd.DataFrame) -> pd.DataFrame:
     # Step 5
     # Memastikan seluruh data yang kosong diisi sesuai tipe kolom
     data.fillna('', inplace=True)  # Mengisi sisa kolom yang mungkin masih kosong dengan string kosong
+    logging.info("Data preprocessing completed.")
     # Callback
     return data
 
-def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
+def preprocess_knn_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
     """
     Fungsi untuk melakukan preprocessing pada data untuk diolah.
     Args:
@@ -61,13 +65,25 @@ def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
     new_data = new_data.rename(columns={'headers_x_requested_with':'headers.x-requested-with'})
     new_data = new_data.rename(columns={'headers_content_type':'headers.content-type'})
     new_data = new_data.rename(columns={'headers_content_length':'headers.content-length'})
- 
+    
+    # Step 0 Custom Bagword
+    new_data['rawBody'] = new_data['rawBody'].apply(preprocess_text)
+    new_data['path'] = new_data['path'].apply(preprocess_text)
+    vectorizer = CountVectorizer(vocabulary=SUSPICIOUS_KEYWORDS)
+    # 
+    f_body_features = vectorizer.transform(new_data['rawBody'])
+    f_body_df = pd.DataFrame(f_body_features.toarray(), columns=vectorizer.get_feature_names_out())
+    new_data['rawBody'] = f_body_df.sum(axis=1)
+
+    f_path_features = vectorizer.transform(new_data['path'])
+    f_path_df = pd.DataFrame(f_path_features.toarray(), columns=vectorizer.get_feature_names_out())
+    new_data['path'] = f_path_df.sum(axis=1)
+
     # Step 1 Kolom dengan TF-IDF Vectorization
     # Load TF-IDF vectorizer yang telah disimpan
     tfidf_ip_v4 = load(f"{DUMP_DIR}/tfidf_ip_v4.pkl")
-    tfidf_ip_v4 = load(f"{DUMP_DIR}/tfidf_ip_v4.pkl")
     tfidf_user_agent = load(f"{DUMP_DIR}/tfidf_user_agent.pkl")
-
+    
     # Transformasikan 'headers.user-agent'
     tfidf_user_agent_features = tfidf_user_agent.transform(new_data['headers.user-agent']).toarray()
     df_user_agent_tfidf_new_columns = ['user_agent_' + feature for feature in tfidf_user_agent.get_feature_names_out()]
@@ -79,7 +95,7 @@ def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
 
     # Gabungkan hasil TF-IDF ke dalam dataset asli
     new_data = pd.concat([new_data.drop(['headers.user-agent', 'ip_v4'], axis=1), df_user_agent_tfidf, df_ip_v4_tfidf], axis=1)
-
+    
     # Step 3. Transformasi Kolom dengan Label Encoding
     label_columns = [
         'method', 'httpVersion', 'headers.accept', 'headers.accept-encoding',
@@ -109,8 +125,29 @@ def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
     scaler = load(f"{DUMP_DIR}/scaler.pkl")
     new_scaled = scaler.transform(new_data)
     newtest_scaled_df = pd.DataFrame(new_scaled) # Use the original column names from X_train
+    logging.info(f"New scaled data: {newtest_scaled_df}")
     # Callback
     return newtest_scaled_df
+
+def predict_knn(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
+    # Load the saved model 
+    loaded_model = load(DUMP_DIR)
+    logging.info(f"Model loaded from {DUMP_DIR}")
+    
+    # Make prediction
+    predictions = loaded_model.predict(new_data)
+    confidence = loaded_model.predict_proba(new_data)
+    # Dapatkan indeks numerik dari prediksi
+    predicted_class = predictions[0]
+    class_index = np.where(loaded_model.classes_ == predicted_class)[0][0] 
+    confidence = confidence[0][class_index] * 100
+    
+    logging.info(f"Prediction result: {predicted_class}, Confidence: {confidence}")
+    # Return as a dictionary
+    return {
+        "prediction": predicted_class,
+        "confidence": confidence
+    }
 
 def preprocess_text(text):
     text = str(text).lower()

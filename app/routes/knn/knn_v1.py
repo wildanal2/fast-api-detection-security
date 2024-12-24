@@ -2,15 +2,14 @@ import pandas as pd
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from app.models.form_req import FormReq
-from app.utils.preprocess import preprocess_input, preprocess_data
+from app.utils.preprocess_knn_v1 import preprocess_knn_input, preprocess_knn_data, predict_knn
 from joblib import load
 import logging
 
-router = APIRouter()
-  
-# Setup logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+router = APIRouter()
+SERVICE_DIR = f"app/services"
 
 @router.post("/predict-label1")
 async def prediction_label1(data: FormReq): 
@@ -45,37 +44,20 @@ async def prediction_label1(data: FormReq):
         df = pd.DataFrame([data.dict()])
         df = df.astype(object)  # Ubah semua tipe data ke Python-native
         
-        # Logging input data
-        logger.info(f"Received data: {df}")
-        
         # Preprocess input
-        preprocessed_input = preprocess_input(df)
-        
+        preprocessed_input = preprocess_knn_input(df)
+
         # Preprocess Data
-        newdata = preprocess_data(preprocessed_input, "app/services/data/sources_knn1_v09795918367346939")
-        logger.info("Data preprocessing completed.")
-        
-        # Load the saved model
-        model_path = "app/services/trained/label1-KNN-scaled-tfidf-no-hamming-k4-0.9795918367346939.joblib"
-        loaded_model = load(model_path)
-        logger.info(f"Model loaded from {model_path}")
-        
-        # Make prediction
-        predictions = loaded_model.predict(newdata)
-        confidence = loaded_model.predict_proba(newdata)
-        # Dapatkan indeks numerik dari prediksi
-        predicted_class = predictions[0]
-        class_index = np.where(loaded_model.classes_ == predicted_class)[0][0] 
-        confidence = confidence[0][class_index] * 100
-        
-        logger.info(f"Prediction result: {predicted_class}, Confidence: {confidence}")
-        
-        # Return result
+        newdata = preprocess_knn_data(preprocessed_input, f"{SERVICE_DIR}/data/sources_knn1_v09795918367346939")
+
+        # Prediction
+        result = predict_knn(newdata, f"{SERVICE_DIR}/trained/label1-KNN-scaled-tfidf-no-hamming-k4-0.9795918367346939.joblib")
+
         return {
             "status": "success",
             "message": "Prediction Label 1 successfully.",
-            "prediction": predicted_class,
-            'confidence': confidence
+            "prediction": result["prediction"],
+            'confidence': result["confidence"]
         }
     
     except FileNotFoundError as e:
@@ -102,37 +84,20 @@ async def prediction_label2(data: FormReq):
         df = pd.DataFrame([data.dict()])
         df = df.astype(object)  # Ubah semua tipe data ke Python-native
         
-        # Logging input data
-        logger.info(f"Received data: {df}")
-        
         # Preprocess input
-        preprocessed_input = preprocess_input(df)
+        preprocessed_input = preprocess_knn_input(df)
         
         # Preprocess Data
-        newdata = preprocess_data(preprocessed_input, "app/services/data/sources_knn2_v09642857142857143")
-        logger.info("Data preprocessing completed.")
+        newdata = preprocess_knn_data(preprocessed_input, f"{SERVICE_DIR}/data/sources_knn2_v09642857142857143") 
         
-        # Load the saved model
-        model_path = "app/services/trained/label2-KNN-scaled-tfidf-no-hamming-k3-0.9642857142857143.joblib"
-        loaded_model = load(model_path)
-        logger.info(f"Model loaded from {model_path}")
-        
-        # Make prediction
-        predictions = loaded_model.predict(newdata)
-        confidence = loaded_model.predict_proba(newdata)
-        logger.info(f"Prediction result: {predictions}, Confidence: {confidence}")
-        # Dapatkan indeks numerik dari prediksi
-        predicted_class = predictions[0]
-        class_index = np.where(loaded_model.classes_ == predicted_class)[0][0] 
-        confidence = confidence[0][class_index] * 100
-        
-        logger.info(f"Prediction result: {predicted_class}, Confidence: {confidence}")
-        # Return result
+        # Prediction
+        result = predict_knn(newdata, f"{SERVICE_DIR}/trained/label2-KNN-scaled-tfidf-no-hamming-k3-0.9642857142857143.joblib")
+
         return {
             "status": "success",
             "message": "Prediction Label 2 successfully.",
-            "prediction": predictions[0],
-            'confidence': confidence
+            "prediction": result["prediction"],
+            'confidence': result["confidence"]
         }
     
     except FileNotFoundError as e:
@@ -158,38 +123,21 @@ async def prediction_label3(data: FormReq):
         # Konversi input POST request ke DataFrame
         df = pd.DataFrame([data.dict()])
         df = df.astype(object)  # Ubah semua tipe data ke Python-native
-        
-        # Logging input data
-        logger.info(f"Received data: {df}")
-        
+         
         # Preprocess input
-        preprocessed_input = preprocess_input(df)
+        preprocessed_input = preprocess_knn_input(df)
         
         # Preprocess Data
-        newdata = preprocess_data(preprocessed_input, "app/services/data/sources_knn3_v09948979591836735")
-        logger.info("Data preprocessing completed.")
+        newdata = preprocess_knn_data(preprocessed_input, f"{SERVICE_DIR}/data/sources_knn3_v09948979591836735")
         
-        # Load the saved model
-        model_path = "app/services/trained/label3-KNN-scaled-tfidf-no-hamming-k4-0.9948979591836735.joblib"
-        loaded_model = load(model_path)
-        logger.info(f"Model loaded from {model_path}")
-        
-        # Make prediction
-        predictions = loaded_model.predict(newdata)
-        confidence = loaded_model.predict_proba(newdata)
-        logger.info(f"Prediction result: {predictions}, Confidence: {confidence}")
-        # Dapatkan indeks numerik dari prediksi
-        predicted_class = predictions[0]
-        class_index = np.where(loaded_model.classes_ == predicted_class)[0][0] 
-        confidence = confidence[0][class_index] * 100
-        
-        logger.info(f"Prediction result: {predicted_class}, Confidence: {confidence}")
-        # Return result
+        # Prediction
+        result = predict_knn(newdata, f"{SERVICE_DIR}/trained/label3-KNN-scaled-tfidf-no-hamming-k4-0.9948979591836735.joblib")
+
         return {
             "status": "success",
             "message": "Prediction Label 3 successfully.",
-            "prediction": predictions[0],
-            'confidence': confidence
+            "prediction": result["prediction"],
+            'confidence': result["confidence"]
         }
     
     except FileNotFoundError as e:
@@ -216,37 +164,20 @@ async def prediction_label4(data: FormReq):
         df = pd.DataFrame([data.dict()])
         df = df.astype(object)  # Ubah semua tipe data ke Python-native
         
-        # Logging input data
-        logger.info(f"Received data: {df}")
-        
         # Preprocess input
-        preprocessed_input = preprocess_input(df)
+        preprocessed_input = preprocess_knn_input(df)
         
         # Preprocess Data
-        newdata = preprocess_data(preprocessed_input, "app/services/data/sources_knn4_v09693877551020408")
-        logger.info("Data preprocessing completed.")
-        
-        # Load the saved model
-        model_path = "app/services/trained/label4-KNN-scaled-tfidf-no-cosine-k3-0.9693877551020408.joblib"
-        loaded_model = load(model_path)
-        logger.info(f"Model loaded from {model_path}")
-        
-        # Make prediction
-        predictions = loaded_model.predict(newdata)
-        confidence = loaded_model.predict_proba(newdata)
-        logger.info(f"Prediction result: {predictions}, Confidence: {confidence}")
-        # Dapatkan indeks numerik dari prediksi
-        predicted_class = predictions[0]
-        class_index = np.where(loaded_model.classes_ == predicted_class)[0][0] 
-        confidence = confidence[0][class_index] * 100
-        
-        logger.info(f"Prediction result: {predicted_class}, Confidence: {confidence}")
-        # Return result
+        newdata = preprocess_knn_data(preprocessed_input, f"{SERVICE_DIR}/data/sources_knn4_v09693877551020408")
+
+        # Prediction
+        result = predict_knn(newdata, f"{SERVICE_DIR}/trained/label4-KNN-scaled-tfidf-no-cosine-k3-0.9693877551020408.joblib")
+
         return {
             "status": "success",
             "message": "Prediction Label 4 successfully.",
-            "prediction": predictions[0],
-            'confidence': confidence
+            "prediction": result["prediction"],
+            'confidence': result["confidence"]
         }
     
     except FileNotFoundError as e:

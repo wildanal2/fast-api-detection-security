@@ -3,8 +3,9 @@ import re
 from joblib import load
 from sklearn.feature_extraction.text import CountVectorizer
 from app.utils.constants import SUSPICIOUS_KEYWORDS
+import logging
 
-def preprocess_input(data: pd.DataFrame) -> pd.DataFrame:
+def preprocess_catboost_input(data: pd.DataFrame) -> pd.DataFrame:
     """
     Fungsi untuk melakukan preprocessing pada data input.
     Args:
@@ -12,6 +13,7 @@ def preprocess_input(data: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Data yang sudah di-preprocess default.
     """
+    logging.info(f"Request body: {data}")
     # Mengisi nilai kosong dengan default
     # Konfigurasi Pandas untuk future behavior
     pd.set_option('future.no_silent_downcasting', True)
@@ -43,7 +45,7 @@ def preprocess_input(data: pd.DataFrame) -> pd.DataFrame:
     # Callback
     return data
 
-def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
+def preprocess_catboost_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
     """
     Fungsi untuk melakukan preprocessing pada data untuk diolah.
     Args:
@@ -64,36 +66,31 @@ def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
 
     # Mengisi nilai kosong dengan default
     # Step 1
-    # Buat CountVectorizer
-    vectorizer = CountVectorizer(vocabulary=SUSPICIOUS_KEYWORDS)
-    # 1 Custom bagwords rawBody
-    new_data['rawBody'] = new_data['rawBody'].apply(preprocess_text)
-    f_body_features = vectorizer.transform(new_data['rawBody'])
-    f_body_df = pd.DataFrame(f_body_features.toarray(), columns=vectorizer.get_feature_names_out())
-    new_data['rawBody'] = f_body_df.sum(axis=1)
-    # 1 Custom bagwords Path
-    new_data['path'] = new_data['path'].apply(preprocess_text)
-    f_path_features = vectorizer.transform(new_data['path'])
-    f_path_df = pd.DataFrame(f_path_features.toarray(), columns=vectorizer.get_feature_names_out())
-    new_data['path'] = f_path_df.sum(axis=1)
-    # Step 2 Kolom dengan TF-IDF Vectorization
     # Load TF-IDF vectorizer yang telah disimpan
-    tfidf_user_agent = load(f"{DUMP_DIR}/tfidf_user_agent.pkl")
+    tfidf_path = load(f"{DUMP_DIR}/tfidf_path.pkl")
+    tfidf_user_agent = load(f"{DUMP_DIR}/tfidf_user-agent.pkl")
     tfidf_ip_v4 = load(f"{DUMP_DIR}/tfidf_ip_v4.pkl")
-
+    tfidf_rawBody = load(f"{DUMP_DIR}/tfidf_rawBody.pkl")
+    # Transformasikan 'path'
+    tfidf_path_features = tfidf_path.transform(new_data['path']).toarray()
+    df_path_tfidf_new_columns = ['path___' + feature for feature in tfidf_path.get_feature_names_out()]
+    df_path_tfidf = pd.DataFrame(tfidf_path_features, columns=df_path_tfidf_new_columns)
     # Transformasikan 'headers.user-agent'
     tfidf_user_agent_features = tfidf_user_agent.transform(new_data['headers.user-agent']).toarray()
-    df_user_agent_tfidf_new_columns = ['user_agent_' + feature for feature in tfidf_user_agent.get_feature_names_out()]
+    df_user_agent_tfidf_new_columns = ['huser_agent___' + feature for feature in tfidf_user_agent.get_feature_names_out()]
     df_user_agent_tfidf = pd.DataFrame(tfidf_user_agent_features, columns=df_user_agent_tfidf_new_columns)
     # Transformasikan 'ip_v4'
     tfidf_ip_v4_features = tfidf_ip_v4.transform(new_data['ip_v4']).toarray()
-    df_ip_v4_tfidf_new_columns = ['ip_v4_' + feature for feature in tfidf_ip_v4.get_feature_names_out()] # Buat list nama kolom baru dengan prefiks "ip_v4"
+    df_ip_v4_tfidf_new_columns = ['ip_v4___' + feature for feature in tfidf_ip_v4.get_feature_names_out()] # Buat list nama kolom baru dengan prefiks "ip_v4"
     df_ip_v4_tfidf = pd.DataFrame(tfidf_ip_v4_features, columns=df_ip_v4_tfidf_new_columns)
-
+    # Transformasikan 'rawBody'
+    tfidf_rawBody_features = tfidf_rawBody.transform(new_data['rawBody']).toarray()
+    df_rawBody_tfidf_new_columns = ['rawBody___' + feature for feature in tfidf_rawBody.get_feature_names_out()]
+    df_rawBody_tfidf = pd.DataFrame(tfidf_rawBody_features, columns=df_rawBody_tfidf_new_columns)
     # Gabungkan hasil TF-IDF ke dalam dataset asli
-    new_data = pd.concat([new_data.drop(['headers.user-agent', 'ip_v4'], axis=1), df_user_agent_tfidf, df_ip_v4_tfidf], axis=1)
+    new_data = pd.concat([new_data.drop(['path', 'headers.user-agent', 'ip_v4', 'rawBody'], axis=1), df_path_tfidf, df_user_agent_tfidf, df_ip_v4_tfidf, df_rawBody_tfidf], axis=1)
 
-    # Step 3. Transformasi Kolom dengan Label Encoding
+    # Step 2. Transformasi Kolom dengan Label Encoding
     label_columns = [
         'method', 'httpVersion', 'headers.accept', 'headers.accept-encoding',
         'remotePort', 'protocol', 'responseStatusCode', 'country', 'isp',
@@ -117,15 +114,34 @@ def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
     # Load scaler dari file
     scaler = load(f"{DUMP_DIR}/label_scaler_headers.content-length.pkl")
     new_data['headers.content-length'] = scaler.transform(new_data[['headers.content-length']])
-    # 6. Scale the new data using the same scaler
-    # Load scaler dari file
-    scaler = load(f"{DUMP_DIR}/scaler.pkl")
-    new_scaled = scaler.transform(new_data)
-    newtest_scaled_df = pd.DataFrame(new_scaled) # Use the original column names from X_train
+    logging.info(f"New scaled data shape: {new_data.shape}")    
     # Callback
-    return newtest_scaled_df
+    return new_data
 
-def preprocess_text(text):
-    text = str(text).lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    return text
+def prdiction_catboost(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
+    # Load the saved model 
+    loaded_model = load(DUMP_DIR)
+    logging.info(f"Model loaded from {DUMP_DIR}")
+    
+    # Make prediction
+    # Get the list of categorical features used during training
+    categorical_features = loaded_model.get_param('cat_features') 
+
+    # Ensure all categorical features in new_data are of type string
+    for feature in categorical_features:
+        new_data[feature] = new_data[feature].astype(str)
+
+    # Predict the probabilities and label for the new data (assuming single row in new_data)
+    probabilities = loaded_model.predict_proba(new_data)[0]  # Take the first (and only) row
+    prediction = loaded_model.predict(new_data)[0]  # Take the first prediction
+
+    # Get the confidence for the predicted label
+    class_index = loaded_model.classes_.tolist().index(prediction)
+    confidence = probabilities[class_index] * 100  # Convert to percentage
+    
+    logging.info(f"Prediction result: {prediction[0]}, Confidence: {confidence}")
+    # Return as a dictionary
+    return {
+        "prediction": prediction[0],
+        "confidence": confidence
+    }
