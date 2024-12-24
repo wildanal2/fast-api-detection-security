@@ -61,12 +61,25 @@ def preprocess_data(new_data: pd.DataFrame, DUMP_DIR: str) -> pd.DataFrame:
     new_data = new_data.rename(columns={'headers_x_requested_with':'headers.x-requested-with'})
     new_data = new_data.rename(columns={'headers_content_type':'headers.content-type'})
     new_data = new_data.rename(columns={'headers_content_length':'headers.content-length'})
- 
-    # Step 1 Kolom dengan TF-IDF Vectorization
+
+    # Mengisi nilai kosong dengan default
+    # Step 1
+    # Buat CountVectorizer
+    vectorizer = CountVectorizer(vocabulary=SUSPICIOUS_KEYWORDS)
+    # 1 Custom bagwords rawBody
+    new_data['rawBody'] = new_data['rawBody'].apply(preprocess_text)
+    f_body_features = vectorizer.transform(new_data['rawBody'])
+    f_body_df = pd.DataFrame(f_body_features.toarray(), columns=vectorizer.get_feature_names_out())
+    new_data['rawBody'] = f_body_df.sum(axis=1)
+    # 1 Custom bagwords Path
+    new_data['path'] = new_data['path'].apply(preprocess_text)
+    f_path_features = vectorizer.transform(new_data['path'])
+    f_path_df = pd.DataFrame(f_path_features.toarray(), columns=vectorizer.get_feature_names_out())
+    new_data['path'] = f_path_df.sum(axis=1)
+    # Step 2 Kolom dengan TF-IDF Vectorization
     # Load TF-IDF vectorizer yang telah disimpan
-    tfidf_ip_v4 = load(f"{DUMP_DIR}/tfidf_ip_v4.pkl")
-    tfidf_ip_v4 = load(f"{DUMP_DIR}/tfidf_ip_v4.pkl")
     tfidf_user_agent = load(f"{DUMP_DIR}/tfidf_user_agent.pkl")
+    tfidf_ip_v4 = load(f"{DUMP_DIR}/tfidf_ip_v4.pkl")
 
     # Transformasikan 'headers.user-agent'
     tfidf_user_agent_features = tfidf_user_agent.transform(new_data['headers.user-agent']).toarray()

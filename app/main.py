@@ -1,10 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.routes import root, predict, items
+from app.routes import root
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
+from app.routes.knn import knn_v1
+from app.routes.catboost import catboost_v1
 
 app = FastAPI()
 
@@ -37,5 +39,5 @@ app.add_middleware(LogRequestMiddleware)
 
 # Include routes
 app.include_router(root.router, tags=["Root"])
-app.include_router(predict.router, tags=["Prediction KNN"])
-app.include_router(items.router, tags=["Items"])
+app.include_router(knn_v1.router, prefix="/api/knn/v1", tags=["Prediction KNN v0.1"])
+app.include_router(catboost_v1.router, prefix="/api/catboost/v1", tags=["Prediction Catboost v0.1"])
